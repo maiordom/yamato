@@ -15,6 +15,37 @@
 
 <body>
 
+<div class="yamato clearfix">
+    <div class="yamato-file-box">
+        <div class="yamato-button">Загрузить файлы</div>
+        <input class="yamato-file-input" type="file">
+    </div>
+    <div class="yamato-items"></div>
+</div>
+
+<script>
+    $( document ).ready( function() {
+        $( '.yamato' ).Yamato({
+            uploadUrl:     'upload.php',
+            fileType:      'png|gif|jpg|jpeg',
+            maxFileSize:   20,
+            maxFilesCount: 50,
+            minImgWidth:   350,
+            minImgHeight:  285,
+            thumbWidth:    147,
+            thumbHeight:   120,
+            fileSizeDim:   1024 * 1024,
+            tmpl:
+            '<div id="yamato-id-${fileID}" class="yamato-item yamato-processing">\
+                <div class="yamato-progress uploadify-progress">\
+                    <div class="yamato-progress-bar uploadify-progress-bar"></div>\
+                </div>\
+                <div class="yamato-img" style="width: ${w}px; height: ${h}px; background: #999;"></div>\
+            </div>'
+        });
+    });
+</script>
+
 </body>
 
 </html>

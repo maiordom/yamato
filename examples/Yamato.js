@@ -45,6 +45,18 @@ var Config = {
         select: 'onFlashSelect'
     },
 
+    managerMsg: {
+        serverError:   'Произошла ошибка, попробуйте снова загрузить фотографию',
+        makePrimary:   'Сделать основным фото',
+        primary:       'Основное фото',
+        maxFilesCount: 'Вы можете загрузить до 12 фотографий',
+        fileSize:      'Вес фотографии превысил максимальный размер в 20мб',
+        imgSize:       'Размер фотографии меньше минимального 350x285',
+        imgType:       'Файл имеет недопустимый формат. Поддерживаемые форматы: JPG, PNG и GIF.',
+        cantRead:      'Неудается отобразить фотографию',
+        innerError:    'Не удалось загрузить некоторые файлы'
+    },
+
     multiType: {
         errorMaxFileCount: 'ERROR_MAX_FILE_COUNT',
         errorFileSize:     'ERROR_FILE_SIZE',
@@ -52,68 +64,479 @@ var Config = {
         errorImgSize:      'ERROR_IMG_SIZE',
         errorCantRead:     'ERROR_CANT_READ',
         resultOk:          'RESULT_OK'
-    },
-
-    settings: {
-        rotateUrl:      'api/rotate-image/',
-        url:            'api/upload-file/',
-        imgTypePattern: 'png|gif|jpg|jpeg',
-        primary:        true,
-        maxFileSize:    20,
-        fileSizeDim:    1024 * 1024,
-        maxFilesCount:  12,
-        minImgWidth:    350,
-        minImgHeight:   285,
-        progressWidth:  122,
-        thumbWidth:     147,
-        thumbHeight:    120,
-        thumbType:      'large',
-        outerErrorTmpl: '<label class="au-form-error serverside">${msg}</label>',
-        tmpl:
-        '<div id="js-upload-photo-${fileID}" class="au-form-photo-mask au-form-input au-form-photo js-form-photos-photo js-form-photo-processing">\
-            <a class="au-form-photo-inner au-form-photo-link au-none js-form-photos-setmain" href="#" title="Сделать фото основным">\
-                <div class="js-form-photos-rotate au-photo-rotate"></div>\
-                <div class="uploadify-progress au-form-progress">\
-                    <div class="uploadify-progress-bar au-form-progress-line"></div>\
-                </div>\
-                <div class="au-form-img js-upload-img" style="width: ${w}px; height: ${h}px; background: #999;"></div>\
-            </a>\
-            <input class="js-upload-value" name="photos[${fileID}][url]" type="hidden" value="null">\
-            <input class="radio js-form-photos-main" name="mainphoto" disabled type="radio" id="photo${fileID}" value="${fileID}">\
-            <label for="photo${fileID}">основное фото</label>\
-            <a class="au-form-photo-remove au-click au-grey js-form-photos-delete" href="#">\
-                <span>Удалить</span>\
-            </a>\
-        </div>',
-
-        flashConfig: {
-            thumbWidth: 147,
-            thumbHeight: 120,
-            width: 121,
-            height: 26,
-            buttonClass: 'js-form-photos-button',
-            buttonText: '' +
-            '<button class="js-form-photos-button au-button au-button-grey" type="button">\
-                <span>Добавить фото</span>\
-            </button>',
-            fileObjName: 'image',
-            fileSizeLimit: '20mb',
-            swf: '/shared/js/ext/uploadify/uploadify.swf',
-            uploader: null,
-            fileTypeExts: '*.gif; *.jpg; *.png; *.jpeg;',
-            removeCompleted: false,
-            uploadLimit: 12,
-            itemTemplate: ''
-        }
     }
 };
+
+Yamato.Config = Config;
 
 var uploadType  = Config.uploadType,
     uploadEvent = Config.uploadEvent,
     xhrEvent    = Config.xhrEvent,
     xhrType     = Config.xhrType,
-    multiEvent  = Config.multiEvent;
+    multiType   = Config.multiType,
+    multiEvent  = Config.multiEvent,
+    managerMsg  = Config.managerMsg;
 
+
+var Iframe = function( props ) {
+    var counter = 0,
+        globalIndex = 0,
+        id      = props.id,
+        btn     = props.btn,
+        url     = props.url,
+        loader  = props.loader,
+        event   = $( {} );
+
+    var f = {
+        upload: function() {
+            f.prepareUpload();
+            f.send();
+        },
+
+        getIframeSetup: function() {
+            return {
+                url: url,
+                secureuri: false,
+                fileElementId: id,
+                dataType: 'json',
+                success: f.onSuccess,
+                error: f.onError
+            };
+        },
+
+        send: function() {
+            $.ajaxFileUpload( f.getIframeSetup() );
+        },
+
+        onSuccess: function( data ) {
+            f.refresh();
+            ++globalIndex;
+            ++counter;
+            event.trigger( xhrEvent.complete, [ data, globalIndex ] );
+        },
+
+        onError: function() {
+            f.refresh();
+            event.trigger( xhrEvent.error );
+        },
+
+        prepareUpload: function() {
+            loader.find( '.js-form-photos-loader-img' ).css( 'display', 'block' );
+            btn.addClass( 'au-button-dark' );
+            utils.forms.buttonDisable( btn );
+            $( '#' + id ).hide();
+        },
+
+        refresh: function () {
+            loader.find( '.js-form-photos-loader-img' ).hide();
+            btn.removeClass( 'au-button-dark' );
+            utils.forms.buttonEnable( btn );
+            $( '#' + id ).show().change( function () {
+                f.upload();
+            });
+        },
+
+        on: function( eventName, callback ) {
+            event.on( eventName, callback );
+        },
+
+        trigger: function( eventName, data ) {
+            event.trigger( eventName, data );
+        },
+
+        removeFile: function() {
+            --counter;
+        },
+
+        getCounter: function() {
+            return counter;
+        },
+
+        setCounter: function( val ) {
+            counter = val;
+        },
+
+        setGlobalIndex: function( val ) {
+            globalIndex = val;
+        },
+
+        destroy: function() {
+            $( '#' + id ).off( 'change' );
+            event.off();
+        },
+
+        rotate: function( index ) {}
+    };
+
+    f.refresh();
+
+    return {
+        on:         f.on,
+        destroy:    f.destroy,
+        removeFile: f.removeFile,
+        getCounter: f.getCounter,
+        rotate:     f.rotate,
+        setCounter: f.setCounter,
+        setGlobalIndex: f.setGlobalIndex
+    };
+};
+
+Yamato.Iframe = Iframe;
+var UploadQueue = function( trigger ) {
+    var queueArr = [], counter = 0;
+
+    function _bind( func, entity ) {
+        return function() {
+            var args = [];
+            for ( var i in arguments ) {
+                args.push( arguments[ i ] );
+            }
+            args.push( entity );
+            func.apply( null, args );
+        };
+    }
+
+    var f = {
+        destroy: function() {
+            for ( var i = 0, len = queueArr.length; i < len; i++ ) {
+                if ( queueArr[ i ].inProcess ) {
+                    queueArr[ i ].abort();
+                    queueArr[ i ].off();
+                    break;
+                }
+            }
+
+            queueArr = null;
+        },
+
+        remove: function( index ) {
+            for ( var i = 0, len = queueArr.length; i < len; i++ ) {
+                if ( queueArr[ i ].index === index ) {
+                    queueArr[ i ].abort();
+                    queueArr[ i ].off();
+                    counter += queueArr[ i ].inProcess ? -1 : 0;
+                    queueArr.splice( i, 1 );
+                    break;
+                }
+            }
+        },
+
+        push: function( entity ) {
+            queueArr.push( entity );
+        },
+
+        findEntity: function( index, callback ) {
+            for ( var i = 0, len = queueArr.length; i < len; i++ ) {
+                if ( queueArr[ i ].index === index ) {
+                    callback( queueArr[ i ], i );
+                    break;
+                }
+            }
+        },
+
+        getItem: function( index ) {
+            var result;
+            f.findEntity( index, function( item ) {
+                result = item;
+            });
+
+            return result;
+        },
+
+        getNext: function() {
+            for ( var i = 0, len = queueArr.length; i < len; i++ ) {
+                if ( !queueArr[ i ].uploaded ) {
+                    return queueArr[ i ];
+                }
+            }
+        },
+
+        bindEntityEvents: function( entity ) {
+            entity.on( xhrEvent.complete,    _bind( f.onUploadComplete, entity ) );
+            entity.on( xhrEvent.error,       _bind( f.onError, entity ) );
+            entity.on( uploadEvent.start,    _bind( f.onUploadStart, entity ) );
+            entity.on( uploadEvent.end,      _bind( f.onUploadEnd, entity ) );
+            entity.on( uploadEvent.progress, _bind( f.onUploadProgress, entity ) );
+        },
+
+        start: function() {
+            var entity = f.getNext();
+
+            if ( !entity || counter > 0 ) { return; }
+
+            f.bindEntityEvents( entity );
+
+            ++counter;
+            entity.send();
+            entity.inProcess = true;
+        },
+
+        onError: function( e, json, entity ) {
+            --counter;
+            entity.inProcess = false;
+            entity.uploaded = true;
+            trigger( xhrEvent.error, [ entity.index, json ] );
+            f.start();
+        },
+
+        onUploadComplete: function( e, json, entity ) {
+            --counter;
+            entity.inProcess = false;
+            entity.uploaded = true;
+            trigger( xhrEvent.complete, [ entity.index, json ] );
+            f.start();
+        },
+
+        onUploadStart: function( e, entity ) {
+            trigger( uploadEvent.start, [ entity.index ] );
+        },
+
+        onUploadEnd: function( e, entity ) {
+            trigger( uploadEvent.end, [ entity.index ] );
+        },
+
+        onUploadProgress: function( e, total, progress, entity ) {
+            trigger( uploadEvent.progress, [ entity.index, total, progress ] );
+        }
+    };
+
+    return {
+        getItem: f.getItem,
+        remove:  f.remove,
+        push:    f.push,
+        start:   f.start,
+        destroy: f.destroy
+    };
+};
+
+Yamato.UploadQueue = UploadQueue;
+/*
+ @props.box     - thumbnails container
+ @props.fileFld - file input field
+ @props.url     - url to upload file
+ @props.config  - uploader settings
+ @props.render  - template engine
+ @props.type    - predefined msgs
+ */
+var Multi = function( props ) {
+    var globalIndex = -1,
+        counter     = 0,
+        event       = $( {} ),
+        multiType   = props.type,
+        multiConfig = props.config, uploadQueue, canvasUtil;
+
+    var f = {
+        init: function() {
+            canvasUtil  = Yamato.CanvasUtil( multiConfig );
+            uploadQueue = Yamato.UploadQueue( f.trigger );
+        },
+
+        checkFilesCount: function( files ) {
+            return multiConfig.maxFilesCount < counter + files.length;
+        },
+
+        checkFileSize: function( file ) {
+            return file.size / ( multiConfig.fileSizeDim ) > multiConfig.maxFileSize;
+        },
+
+        sliceFiles: function( files ) {
+            var totalLength = counter + files.length,
+                rest = totalLength - multiConfig.maxFilesCount, _files = [];
+
+            for ( var i = 0, len = Math.abs( files.length - rest ); i < len; i++ ) {
+                _files[ i ] = files[ i ];
+            }
+            return _files;
+        },
+
+        readTarget: function( files ) {
+            if ( f.checkFilesCount( files ) ) {
+                f.trigger( multiEvent.error, [ { result: multiType.errorMaxFileCount } ] );
+                files = f.sliceFiles( files );
+            }
+
+            f.renderThumbnails( files );
+        },
+
+        validateFile: function( file ) {
+            /* ie10 check */
+            if ( !file.type && file.name.length ) {
+                if ( !file.name.match( /(.png|.jpg|.gif|.jpeg)$/gi ) ) {
+                    f.renderCap( f.getCapData( file.index ) );
+                    f.trigger( multiEvent.error, [ { result: multiType.errorImgType, index: file.index } ] );
+                    return;
+                }
+            } else if ( file.type.search( multiConfig.imgTypePattern ) === -1  ) {
+                f.renderCap( f.getCapData( file.index ) );
+                f.trigger( multiEvent.error, [ { result: multiType.errorImgType, index: file.index } ] );
+                return;
+            } else if ( f.checkFileSize( file ) ) {
+                f.renderCap( f.getCapData( file.index ) );
+                f.trigger( multiEvent.error, [ { result: multiType.errorFileSize, index: file.index } ] );
+                return;
+            }
+
+            return true;
+        },
+
+        renderThumbnails: function( files ) {
+            var file;
+            for ( var i = 0, len = files.length; i < len; i++ ) {
+                file = files[ i ];
+                file.index = ++globalIndex;
+                ++counter;
+
+                if ( f.validateFile( file ) ) {
+                    f.renderCap( f.getCapData( file.index ) );
+                    var entityItem = f.createQueueItem( file );
+                    uploadQueue.push( entityItem );
+                    f.readFile( file, entityItem, f.onReadFile );
+                }
+            }
+        },
+
+        readFile: function( file, entityItem, callback ) {
+            var reader = new FileReader();
+
+            reader.onload = function( e ) {
+                var srcImg = document.createElement( 'img' );
+
+                srcImg.onload = function() {
+                    canvasUtil.resizeSrcImg( this, function( resizedSrcImg ) {
+                        callback( file, entityItem, srcImg, resizedSrcImg );
+                    });
+                };
+
+                srcImg.onerror = function() {
+                    callback( file, entityItem, null );
+                };
+
+                srcImg.src = e.target.result;
+            };
+
+            reader.onerror = function() {
+                callback( file, entityItem, null );
+            };
+
+            reader.readAsDataURL( file );
+        },
+
+        onReadFile: function( file, entityItem, srcImg, resizedSrcImg ) {
+            var index = file.index;
+
+            if ( srcImg === null ) {
+                f.trigger( multiEvent.error, [ { result: multiType.errorCantRead, index: index } ] );
+                uploadQueue.remove( file.index );
+            } else if ( !f.checkImgSize( srcImg ) ) {
+                f.trigger( multiEvent.error, [ { result: multiType.errorImgSize, index: index } ] );
+                uploadQueue.remove( file.index );
+                canvasUtil.resizeImgToThumb( resizedSrcImg, function( thumb ) {
+                    f.insertResizedImg( index, thumb );
+                });
+            } else {
+                entityItem.srcImg = srcImg;
+                entityItem.resizedSrcImg = resizedSrcImg;
+                uploadQueue.start();
+
+                canvasUtil.resizeImgToThumb( resizedSrcImg, function( thumb ) {
+                    f.insertResizedImg( index, thumb );
+                });
+            }
+        },
+
+        getCapData: function( index ) {
+            return {
+                w:     multiConfig.thumbWidth,
+                h:     multiConfig.thumbHeight,
+                index: index
+            };
+        },
+
+        renderCap: function( data ) {
+            props.render( data );
+        },
+
+        insertResizedImg: function( index, newPhotoImg ) {
+            var photoBox = props.box.find( '#yamato-id-' + index ),
+                photoImg = photoBox.find( '.yamato-img' );
+
+            $( newPhotoImg ).insertAfter( photoImg ).addClass( photoImg.attr( 'class' ) );
+            photoImg.remove();
+        },
+
+        createQueueItem: function( file, srcImg, resizedSrcImg ) {
+            var entity = Yamato.Xhr({
+                data: { image: file },
+                url: props.url
+            });
+
+            entity.file      = file;
+            entity.index     = file.index;
+            entity.rzdSrcImg = resizedSrcImg;
+            entity.srcImg    = srcImg;
+            entity.angle     = 0;
+            entity.uploaded  = false;
+            entity.inProcess = false;
+
+            return entity;
+        },
+
+        checkImgSize: function( img ) {
+            return img.width >= multiConfig.minImgWidth && img.height >= multiConfig.minImgHeight;
+        },
+
+        removeFile: function( index ) {
+            --counter;
+            uploadQueue.remove( parseInt( index ) );
+            uploadQueue.start();
+        },
+
+        on: function( eventName, callback ) {
+            event.on( eventName, callback );
+        },
+
+        trigger: function( eventName, data ) {
+            event.trigger( eventName, data );
+        },
+
+        getCounter: function() {
+            return counter;
+        },
+
+        setCounter: function( val ) {
+            counter = val;
+        },
+
+        setGlobalIndex: function( val ) {
+            globalIndex = val;
+        },
+
+        destroy: function() {
+            props.fileFld.off( 'change' ).attr( 'multiple', false );
+            event.off();
+            uploadQueue.destroy();
+        }
+    };
+
+    f.init();
+
+    return {
+        on:         f.on,
+        removeFile: f.removeFile,
+        getCounter: f.getCounter,
+        setCounter: f.setCounter,
+        rotate:     f.rotate,
+        readTarget: f.readTarget,
+        destroy:    f.destroy,
+        setGlobalIndex: f.setGlobalIndex
+    };
+}
+
+Multi.isAvailableCanvasRotate = function() {
+    return !!document.createElement( 'canvas' ).getContext;
+};
+
+Yamato.Multi = Multi;
 var CanvasUtil = function( config ) {
     var f = {
         rotateImg: function( img, angle, callback ) {
@@ -147,6 +570,7 @@ var CanvasUtil = function( config ) {
             nImg.onload = function() {
                 callback( this, src );
             };
+            
             nImg.src = src;
         },
 
@@ -224,7 +648,6 @@ var CanvasUtil = function( config ) {
 };
 
 Yamato.CanvasUtil = CanvasUtil;
-
 var xhrTimeout  = 30000;
 
 var Xhr = function( props ) {
@@ -367,16 +790,16 @@ Xhr.isAvailable = function() {
 };
 
 Yamato.Xhr = Xhr;
-
-
-var UploadManager = function( el, engineType ) {
-    var uploadEngine, dropZone, activeProgress, activeProgressLine, nodes = {}, fileFldId, config = {}, photoPrefix = 'js-upload-photo-', photoIndexRegExp = '\\d+';
+var Manager = function( el, settings, engineType ) {
+    var uploadEngine, dropZone, activeProgress, activeProgressLine, nodes = {}, fileFldId, photoPrefix = 'yamato-id-', photoIndexRegExp = '\\d+';
 
     var f = {
         init: function() {
             f.cacheObjects();
-            f.readElData();
+            f.setEngine();
+        },
 
+        setEngine: function() {
             /* debug mode=on */
             switch( engineType ) {
                 case 'flash':  f.setFlashEngine();  return;
@@ -385,9 +808,9 @@ var UploadManager = function( el, engineType ) {
             }
 
             /* detect available engine */
-            if ( AM.Upload.File.isAvailable() ) {
+            if ( Yamato.Xhr && Yamato.Xhr.isAvailable() ) {
                 f.setHTML5Engine();
-            } else if ( AM.Upload.Flash.isAvailable() ) {
+            } else if ( Yamato.Flash && Yamato.Flash.isAvailable() ) {
                 f.setFlashEngine();
             } else {
                 f.setIframeEngine();
@@ -398,12 +821,9 @@ var UploadManager = function( el, engineType ) {
             engineType = 'html5';
             f.setMultiUpload();
             f.setCounterToUploadEngine();
-            f.setCounterToDropZone();
             f.checkPhotosCount();
-            f.setDropZone();
             f.setMultiHandler();
 
-            f.bindPhotoEvents();
             f.bindMultiUploadEvents();
             f.bindErrorEvents();
         },
@@ -413,7 +833,6 @@ var UploadManager = function( el, engineType ) {
             f.setFlashUpload();
             f.checkPhotosCount();
 
-            f.bindPhotoEvents();
             f.bindMultiUploadEvents();
             f.bindFlashEvents();
             f.bindErrorEvents();
@@ -425,41 +844,27 @@ var UploadManager = function( el, engineType ) {
             f.setCounterToUploadEngine();
             f.checkPhotosCount();
 
-            f.bindPhotoEvents();
             f.bindSingleUploadEvents();
         },
 
         cacheObjects: function() {
             nodes = {
                 el:      el,
-                errFld:  el.find( '.au-form-field-errors' ),
-                dz:      el.find( '.au-form-dropzone' ),
-                dzBody:  el.find( '.au-form-dropzone-body' ),
-                box:     el.find( '.js-form-photos-photos' ),
-                row:     el.find( '.js-form-photos-photos-row' ),
-                btn:     el.find( '.js-form-photos-button' ),
-                fileFld: el.find( '.js-form-photos-file' ),
-                fileRow: el.find( '.js-form-photos-file-row' ),
-                fileRowClone: el.find( '.js-form-photos-file-row' ).clone()
+                box:     el.find( '.yamato-items' ),
+                btn:     el.find( '.yamato-button' ),
+                fileFld: el.find( '.yamato-file-input' ),
+                fileRow: el.find( '.yamato-file-box' ),
+                fileRowClone: el.find( '.yamato-file-box' ).clone()
             };
 
             fileFldId = nodes.fileFld.attr( 'id' );
         },
 
-        readElData: function() {
-            var configName       = el.data( 'config' );
-            config               = AM.Upload.Config[ configName ];
-            config.maxFilesCount = nodes.el.data( 'maxFilesCount' );
-            config.maxFileSize   = nodes.el.data( 'maxFileSize' );
-            config.primary       = nodes.el.data( 'primary' );
-            config.url           = 'http://' + location.host + '/' + nodes.el.data( 'url' );
-        },
-
         setFlashUpload: function() {
-            var fileWrapper = el.find( '.js-form-file-wrapper' ),
-                fileField   = el.find( '.js-form-photos-file' );
+            var fileWrapper = el.find( '.yamato-file-box' ),
+                fileField   = el.find( '.yamato-file-input' );
 
-            nodes.box.find( '.js-form-photos-photo' ).each( function() {
+            nodes.box.find( '.yamato-items' ).each( function() {
                 var photo = $( this ),
                     id = f.getIndexPhoto( photo );
 
@@ -471,20 +876,20 @@ var UploadManager = function( el, engineType ) {
             fileField.insertAfter( fileWrapper );
             fileWrapper.remove();
 
-            config._tmpl = config.tmpl;
-            config.tmpl  = config.flashConfig.itemTemplate;
-            config.flashConfig.uploader = config.url;
+            settings._tmpl = settings.tmpl;
+            settings.tmpl  = settings.flashConfig.itemTemplate;
+            settings.flashConfig.uploader = settings.uploadUrl;
 
-            uploadEngine = AM.Upload.Flash({
+            uploadEngine = Yamato.Flash({
                 box:     nodes.box,
                 el:      fileField,
-                fConfig: config.flashConfig,
-                config:  config,
+                fConfig: settings.flashConfig,
+                config:  settings,
                 render:  f.renderPhoto,
-                type:    AM.Upload.Config.multiType
+                type:    Yamato.Config.multiType
             });
 
-            nodes.btn = el.find( '.js-form-photos-button' );
+            nodes.btn = el.find( '.yamato-button' );
             el.find( '.uploadify-queue' ).appendTo( nodes.box );
         },
 
@@ -492,45 +897,24 @@ var UploadManager = function( el, engineType ) {
             var props = {
                 btn:    nodes.btn,
                 id:     nodes.fileFld.attr( 'id' ),
-                loader: nodes.el.find( '.js-form-photos-loader' ),
-                url:    config.url
+                loader: nodes.el.find( '.yamato-loader' ),
+                url:    settings.uploadUrl
             };
 
-            uploadEngine = AM.Upload.Iframe( props );
+            uploadEngine = Yamato.Iframe( props );
         },
 
         setMultiUpload: function() {
             var props = {
                 box:     nodes.box,
                 fileFld: nodes.fileFld,
-                url:     config.url,
-                config:  config,
+                url:     settings.uploadUrl,
+                config:  settings,
                 render:  f.renderPhoto,
-                type:    AM.Upload.Config.multiType
+                type:    Yamato.Config.multiType
             };
 
-            uploadEngine = AM.Upload.Multi( props );
-        },
-
-        setDropZone: function() {
-            /* bug with ie version 10.0.9200.16660, waiting for version update */
-            if ( $.browser.msie && parseInt( $.browser.version, 10 ) === 10 ) {
-                return false;
-            }
-
-            if ( !( 'draggable' in document.createElement( 'span' ) ) ) {
-                return;
-            }
-
-            if ( el.data().dragAndDropTooltip ) {
-                el.find( '.js-upload-tooltip' ).html( el.data().dragAndDropTooltip );
-            }
-
-            dropZone = AM.Upload.DropZone({
-                el: nodes.dz,
-                actCls: 'au-form-dropzone-act',
-                onDropFiles: f.onDropFiles
-            });
+            uploadEngine = Yamato.Multi( props );
         },
 
         setMultiHandler: function() {
@@ -538,28 +922,9 @@ var UploadManager = function( el, engineType ) {
             nodes.fileFld.attr( 'multiple', true );
         },
 
-        bindPhotoEvents: function() {
-            if ( config.primary === true ) {
-                nodes.box.on( 'click',  '.js-form-photos-setmain', f.onSelectPhotoByLink );
-                nodes.box.on( 'change', '.js-form-photos-main',    f.onSelectPhotoByRadio );
-            }
-
-            nodes.box.on( 'click', '.js-form-photos-delete', f.onRemovePhoto );
-            nodes.box.on( 'click', '.js-form-photos-rotate', f.onRotatePhoto );
-        },
-
         bindFlashEvents: function() {
             uploadEngine.on( flashEvent.select, function() {
-                nodes.row.show();
                 f.clearOuterError();
-                if ( !f.checkPhotosCount() ) {
-                    uploadEngine.disable( true );
-                } else {
-                    uploadEngine.disable( false );
-                }
-            });
-
-            nodes.box.on( 'click', '.js-form-photos-delete', function() {
                 if ( !f.checkPhotosCount() ) {
                     uploadEngine.disable( true );
                 } else {
@@ -574,19 +939,16 @@ var UploadManager = function( el, engineType ) {
                     f.showOuterError( json.error );
                 } else {
                     var data = {
-                        w:     config.thumbWidth,
-                        h:     config.thumbHeight,
+                        w:     settings.thumbWidth,
+                        h:     settings.thumbHeight,
                         index: index,
-                        src:   json.types[ config.thumbType ].url
+                        src:   json.types[ settings.thumbType ].url
                     };
 
-                    nodes.row.show();
                     nodes.fileFld = $( '#' + fileFldId );
                     var photo = f.renderPhoto( data );
-                    photo.find( '.au-form-progress' ).hide();
+                    photo.find( '.yamato-progress' ).hide();
                     f.enablePhoto( index, json.value );
-                    f.enableRotate( index );
-                    f.updateFormProgress( index, true );
                     f.findPrimary();
                     f.clearOuterError();
                     f.checkPhotosCount();
@@ -600,11 +962,8 @@ var UploadManager = function( el, engineType ) {
 
         bindMultiUploadEvents: function() {
             uploadEngine.on( xhrEvent.complete, function( e, index, json ) {
-                if ( json.value ) {
+                if ( json.result === 'RESULT_OK' ) {
                     f.enablePhoto( index, json.value );
-                    f.enableRotate( index );
-                    f.updateFormProgress( index, true );
-                    f.findPrimary();
                 } else {
                     f.showInnerError( index, json.error );
                 }
@@ -618,14 +977,14 @@ var UploadManager = function( el, engineType ) {
             });
 
             uploadEngine.on( uploadEvent.start, function( e, index ) {
-                var photo = f.getPhoto( index ).removeClass( 'au-form-photo-mask' );
-                activeProgress = photo.find( '.au-form-progress' ).show();
-                activeProgressLine = activeProgress.find( '.au-form-progress-line' ).width( 0 );
+                var photo = f.getPhoto( index );
+                activeProgress = photo.find( '.yamato-progress' ).show();
+                activeProgressLine = activeProgress.find( '.yamato-progress-bar' ).width( 0 );
             });
 
             uploadEngine.on( uploadEvent.progress, function( e, index, total, progress ) {
                 activeProgressLine.stop().animate({
-                    width: config.progressWidth * progress / total
+                    width: settings.progressWidth * progress / total
                 }, 200 * progress / total );
             });
         },
@@ -642,6 +1001,11 @@ var UploadManager = function( el, engineType ) {
             });
         },
 
+        enablePhoto: function( index, value ) {
+            f.getPhoto( index )
+                .removeClass( 'yamato-processing' ).addClass( 'yamato-ready' );
+        },
+
         hideProgress: function() {
             activeProgress.hide();
             activeProgressLine.width( 0 );
@@ -651,36 +1015,13 @@ var UploadManager = function( el, engineType ) {
             return f.getTmpl( data ).appendTo( nodes.box );
         },
 
-        prepareToRotate: function( photo ) {
-            photo.removeClass( 'js-form-photo-ready' );
-            photo.find( '.au-form-progress' ).show();
-            photo.find( '.au-form-progress-line' ).width( 0 );
-            photo.addClass( 'au-form-photo-mask' );
-
-            if ( photo.hasClass( 'primary' ) ) {
-                photo.removeClass( 'primary' );
-                photo.find( '.js-form-photos-main' ).prop( 'disabled', true ).prop( 'checked', false );
-                f.findPhotoForPrimary( photo );
-            }
-        },
-
-        onRotatePhoto: function() {
-            var photo = $( this ).closest( '.js-form-photos-photo' ),
-                index = f.getIndexPhoto( photo );
-
-            f.prepareToRotate( photo );
-            uploadEngine.rotate( index );
-            return false;
-        },
-
         onDropFiles: function( e ) {
             var files = e.originalEvent.dataTransfer.files;
             f.appendFiles( files );
-            f.setCounterToDropZone();
         },
 
         setCounterToUploadEngine: function() {
-            var els = nodes.box.find( '.js-form-photos-photo' ), index, indexes = [ -1 ];
+            var els = nodes.box.find( '.yamato-item' ), index, indexes = [ -1 ];
 
             els.each( function() {
                 index = f.getIndexPhoto( $( this ) );
@@ -692,26 +1033,6 @@ var UploadManager = function( el, engineType ) {
             uploadEngine.setGlobalIndex( index );
         },
 
-        setCounterToDropZone: function() {
-            var counter = uploadEngine.getCounter(),
-                rest = config.maxFilesCount - counter;
-
-            if ( counter === config.maxFilesCount ) {
-                nodes.dzBody.text( 'Вы достигли лимита фотографий' );
-            } else if ( counter === config.maxFilesCount - 1 ) {
-                nodes.dzBody.text( 'Не больше 1 штуки' );
-            } else {
-                nodes.dzBody.text( 'Не больше ' + rest + ' штук' );
-            }
-        },
-
-        onRemovePhoto: function( e ) {
-            var photo = $( this ).closest( '.js-form-photos-photo' );
-            f.checkPhotosCount();
-            e.preventDefault();
-            e.stopPropagation();
-        },
-
         getIndexPhoto: function( el ) {
             return new RegExp( photoIndexRegExp, 'gi' ).exec( el.attr( 'id' ) )[ 0 ];
         },
@@ -720,28 +1041,8 @@ var UploadManager = function( el, engineType ) {
             return nodes.box.find( '#' + photoPrefix + index );
         },
 
-        enablePhoto: function( index, value ) {
-            var photoBox = f.getPhoto( index ),
-                photoValue = photoBox.find( '.js-upload-value' );
-
-            photoBox.removeClass( 'js-form-photo-processing au-form-photo-mask' ).addClass( 'js-form-photo-ready' );
-            photoBox.find( '.js-form-photos-main' ).prop( 'disabled', false );
-            photoValue.val( value );
-        },
-
-        removePhoto: function( photo, callback ) {
-            var index = f.getIndexPhoto( photo );
-            uploadEngine.removeFile( index );
-            photo.addClass( 'js-form-photo-removed' );
-            photo.fadeOut( function() {
-                photo.remove();
-                if ( callback ) { callback(); }
-            });
-        },
-
         onSelectFiles: function( e ) {
             f.appendFiles( e.target.files );
-            f.setCounterToDropZone();
             this.value = '';
         },
 
@@ -751,26 +1052,26 @@ var UploadManager = function( el, engineType ) {
         },
 
         checkPhotosCount: function() {
-            if ( uploadEngine.getCounter() === config.maxFilesCount ) {
-                nodes.btn.addClass( 'au-button-dark' );
+            if ( uploadEngine.getCounter() === settings.maxFilesCount ) {
+                nodes.btn.addClass( 'yamato-dark' );
                 nodes.fileFld.hide();
                 return false;
             } else {
-                nodes.btn.removeClass( 'au-button-dark' );
+                nodes.btn.removeClass( 'yamato-dark' );
                 nodes.fileFld.show();
                 return true;
             }
         },
 
         getTmpl: function( data ) {
-            var tmpl = config.tmpl, box;
+            var tmpl = settings.tmpl, box;
             tmpl = tmpl.replace( /\$\{fileID\}/gi, data.index );
             tmpl = tmpl.replace( /\$\{w\}/gi, data.w );
             tmpl = tmpl.replace( /\$\{h\}/gi, data.h );
             box  = $( tmpl );
 
             if ( $.browser.msie && parseInt( $.browser.version, 10 ) === 7 ) {
-                box[ 0 ].style.width = config.thumbWidth + 'px';
+                box[ 0 ].style.width = settings.thumbWidth + 'px';
                 box.find( '.js-upload-img' ).height( data.h );
             }
 
@@ -783,7 +1084,7 @@ var UploadManager = function( el, engineType ) {
 
         insertPhotoImgToTmpl: function( data, box ) {
             var photoBox    = $( box ),
-                photoImg    = photoBox.find( '.js-upload-img' ),
+                photoImg    = photoBox.find( '.yamato-img' ),
                 newPhotoImg = new Image( data.w, data.h );
 
             newPhotoImg.src = data.src;
@@ -801,19 +1102,23 @@ var UploadManager = function( el, engineType ) {
             if ( dropZone ) { dropZone.destroy(); }
 
             if ( engineType === 'flash' ) {
-                config.tmpl = config._tmpl;
-                delete config._tmpl;
+                settings.tmpl = settings._tmpl;
+                delete settings._tmpl;
 
-                nodes.box.find( '.js-form-photos-photo' ).each( function() {
+                nodes.box.find( '.yamato-item' ).each( function() {
                     var item = $( this ),
                         id = item.attr( 'id' ), index;
 
                     index = new RegExp( 'SWFUpload_0_(\\d+)', 'gi' ).exec( id )[ 1 ];
                     index = index.substr( 1, index.length - 1 );
                     index = parseInt( index, 10 );
-                    item.attr( 'id', 'js-upload-photo-' + index );
+                    item.attr( 'id', 'yamato-id-' + index );
                 });
             }
+        },
+
+        showInnerError: function() {
+
         }
     };
 
@@ -824,6 +1129,8 @@ var UploadManager = function( el, engineType ) {
     };
 };
 
+Yamato.Manager = Manager;
+
 $.fn.Yamato = function( options ) {
     $( this ).each( function() {
         var item = $( this ), entity;
@@ -831,12 +1138,10 @@ $.fn.Yamato = function( options ) {
         if ( item.data( 'Yamato' ) ) {
             console.log( 'Yamato on this node already initialized', this );
         } else {
-            entity = Yamato( item, options || {} );
+            entity = Yamato.Manager( item, options || {} );
             item.data( 'Yamato', entity );
         }
     });
 };
-
-window.Yamato = Yamato;
 
 })( jQuery, window, undefined );

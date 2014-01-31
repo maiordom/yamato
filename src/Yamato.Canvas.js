@@ -31,6 +31,7 @@ var CanvasUtil = function( config ) {
             nImg.onload = function() {
                 callback( this, src );
             };
+            
             nImg.src = src;
         },
 

@@ -1,130 +1,3 @@
-var UploadQueue = function( trigger ) {
-    var queueArr = [], counter = 0;
-
-    function _bind( func, entity ) {
-        return function() {
-            var args = [];
-            for ( var i in arguments ) {
-                args.push( arguments[ i ] );
-            }
-            args.push( entity );
-            func.apply( null, args );
-        };
-    }
-
-    var f = {
-        destroy: function() {
-            for ( var i = 0, len = queueArr.length; i < len; i++ ) {
-                if ( queueArr[ i ].inProcess ) {
-                    queueArr[ i ].abort();
-                    queueArr[ i ].off();
-                    break;
-                }
-            }
-
-            queueArr = null;
-        },
-
-        remove: function( index ) {
-            for ( var i = 0, len = queueArr.length; i < len; i++ ) {
-                if ( queueArr[ i ].index === index ) {
-                    queueArr[ i ].abort();
-                    queueArr[ i ].off();
-                    counter += queueArr[ i ].inProcess ? -1 : 0;
-                    queueArr.splice( i, 1 );
-                    break;
-                }
-            }
-        },
-
-        push: function( entity ) {
-            queueArr.push( entity );
-        },
-
-        findEntity: function( index, callback ) {
-            for ( var i = 0, len = queueArr.length; i < len; i++ ) {
-                if ( queueArr[ i ].index === index ) {
-                    callback( queueArr[ i ], i );
-                    break;
-                }
-            }
-        },
-
-        getItem: function( index ) {
-            var result;
-            f.findEntity( index, function( item ) {
-                result = item;
-            });
-
-            return result;
-        },
-
-        getNext: function() {
-            for ( var i = 0, len = queueArr.length; i < len; i++ ) {
-                if ( !queueArr[ i ].uploaded ) {
-                    return queueArr[ i ];
-                }
-            }
-        },
-
-        bindEntityEvents: function( entity ) {
-            entity.on( xhrEvent.complete,    _bind( f.onUploadComplete, entity ) );
-            entity.on( xhrEvent.error,       _bind( f.onError, entity ) );
-            entity.on( uploadEvent.start,    _bind( f.onUploadStart, entity ) );
-            entity.on( uploadEvent.end,      _bind( f.onUploadEnd, entity ) );
-            entity.on( uploadEvent.progress, _bind( f.onUploadProgress, entity ) );
-        },
-
-        start: function() {
-            var entity = f.getNext();
-
-            if ( !entity || counter > 0 ) { return; }
-
-            f.bindEntityEvents( entity );
-
-            ++counter;
-            entity.send();
-            entity.inProcess = true;
-        },
-
-        onError: function( e, json, entity ) {
-            --counter;
-            entity.inProcess = false;
-            entity.uploaded = true;
-            trigger( xhrEvent.error, [ entity.index, json ] );
-            f.start();
-        },
-
-        onUploadComplete: function( e, json, entity ) {
-            --counter;
-            entity.inProcess = false;
-            entity.uploaded = true;
-            trigger( xhrEvent.complete, [ entity.index, json ] );
-            f.start();
-        },
-
-        onUploadStart: function( e, entity ) {
-            trigger( uploadEvent.start, [ entity.index ] );
-        },
-
-        onUploadEnd: function( e, entity ) {
-            trigger( uploadEvent.end, [ entity.index ] );
-        },
-
-        onUploadProgress: function( e, total, progress, entity ) {
-            trigger( uploadEvent.progress, [ entity.index, total, progress ] );
-        }
-    };
-
-    return {
-        getItem: f.getItem,
-        remove:  f.remove,
-        push:    f.push,
-        start:   f.start,
-        destroy: f.destroy
-    };
-}
-
 /*
  @props.box     - thumbnails container
  @props.fileFld - file input field
@@ -134,17 +7,16 @@ var UploadQueue = function( trigger ) {
  @props.type    - predefined msgs
  */
 var Multi = function( props ) {
-    var globalIndex  = -1,
-        counter      = 0,
-        event        = $( {} ),
-        multiType    = props.type,
-        multiConfig  = props.config, uploadQueue, rotateQueue, canvasUtil;
+    var globalIndex = -1,
+        counter     = 0,
+        event       = $( {} ),
+        multiType   = props.type,
+        multiConfig = props.config, uploadQueue, canvasUtil;
 
     var f = {
         init: function() {
-            canvasUtil  = CanvasUtil( multiConfig );
-            uploadQueue = UploadQueue( f.trigger );
-            rotateQueue = AM.Upload.RotateQueue( multiConfig.rotateUrl, f.trigger );
+            canvasUtil  = Yamato.CanvasUtil( multiConfig );
+            uploadQueue = Yamato.UploadQueue( f.trigger );
         },
 
         checkFilesCount: function( files ) {
@@ -177,7 +49,7 @@ var Multi = function( props ) {
         validateFile: function( file ) {
             /* ie10 check */
             if ( !file.type && file.name.length ) {
-                if ( !file.name.match( new RegExp( '(.png|.jpg|.gif|.jpeg)$', 'gi' ) ) ) {
+                if ( !file.name.match( /(.png|.jpg|.gif|.jpeg)$/gi ) ) {
                     f.renderCap( f.getCapData( file.index ) );
                     f.trigger( multiEvent.error, [ { result: multiType.errorImgType, index: file.index } ] );
                     return;
@@ -273,15 +145,15 @@ var Multi = function( props ) {
         },
 
         insertResizedImg: function( index, newPhotoImg ) {
-            var photoBox = props.box.find( '#js-upload-photo-' + index ),
-                photoImg = photoBox.find( '.js-upload-img' );
+            var photoBox = props.box.find( '#yamato-id-' + index ),
+                photoImg = photoBox.find( '.yamato-img' );
 
             $( newPhotoImg ).insertAfter( photoImg ).addClass( photoImg.attr( 'class' ) );
             photoImg.remove();
         },
 
         createQueueItem: function( file, srcImg, resizedSrcImg ) {
-            var entity = AM.Upload.File({
+            var entity = Yamato.Xhr({
                 data: { image: file },
                 url: props.url
             });
@@ -295,32 +167,6 @@ var Multi = function( props ) {
             entity.inProcess = false;
 
             return entity;
-        },
-
-        rotate: function( _index ) {
-            var index = parseInt( _index, 10 ),
-                queueItem = uploadQueue.getItem( index );
-
-            if ( queueItem ) {
-                queueItem.angle += 90;
-                queueItem.angle += queueItem.angle >= 360 ? - 360 : 0;
-
-                canvasUtil.rotateImg( queueItem.rzdSrcImg, queueItem.angle, function( rotatedRzdSrcImg ) {
-                    canvasUtil.resizeImgToThumb( rotatedRzdSrcImg, function( thumb ) {
-                        f.insertResizedImg( index, thumb );
-                    });
-                });
-            } else {
-                queueItem = f.createQueueItem( { id: index }, null, null );
-                queueItem.angle += 90;
-                queueItem.angle += queueItem.angle >= 360 ? - 360 : 0;
-                queueItem.uploaded = true;
-                uploadQueue.push( queueItem );
-            }
-
-            rotateQueue.push( index, queueItem.angle, function( data ) {
-
-            });
         },
 
         checkImgSize: function( img ) {
